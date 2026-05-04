@@ -6,10 +6,11 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function Signup() {
   const navigate = useNavigate();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const {setToken} = useAuth();
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [serverError, setServerError] = useState<string>("");
 
   const signupMutation = useMutation({
     mutationFn: async () => {
@@ -23,10 +24,34 @@ export default function Signup() {
       setToken(data.token);
       navigate("/setup");
     },
-    onError: () => {
-      alert("Signup failed");
-    },
+    onError: (error: any) => {
+    const message =
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    "Signup failed";
+
+    setServerError(message);
+}
   });
+
+  const validate = () => {
+  const newErrors: typeof errors = {};
+
+  if (!email) {
+    newErrors.email = "Email is required";
+  } else if (!/\S+@\S+\.\S+/.test(email)) {
+    newErrors.email = "Invalid email format";
+  }
+
+  if (!password) {
+    newErrors.password = "Password is required";
+  } else if (password.length < 8) {
+    newErrors.password = "Password must be at least 8 characters";
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -44,7 +69,10 @@ export default function Signup() {
           Start your journey into private communication.
         </p>
 
-        <form className="mt-6 space-y-4 text-left" onSubmit={(e) => {e.preventDefault(); signupMutation.mutate();}}>
+        <form className="mt-6 space-y-4 text-left" onSubmit={(e) => {e.preventDefault();
+                                                                     if (!validate()) return;
+                                                                     signupMutation.mutate();}}
+        >
 
           <div>
             <label htmlFor="email" className="text-sm text-gray-600">Email Address</label>
@@ -56,6 +84,9 @@ export default function Signup() {
               placeholder="name@domain.com"
               className="w-full mt-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {errors.email && (
+              <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+            )}
           </div>
 
           <div>
@@ -68,7 +99,16 @@ export default function Signup() {
               placeholder="********"
               className="w-full mt-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {errors.password && (
+              <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+            )}
           </div>
+
+          {serverError && (
+          <p className="text-red-500 text-sm text-left mb-2">
+                    {serverError}
+          </p>
+          )}
 
           <button
             type="submit"
