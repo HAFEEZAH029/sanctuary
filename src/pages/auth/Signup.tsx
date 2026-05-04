@@ -3,35 +3,89 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
+import { generateRSAKeyPair,
+         exportPublicKey,
+         wrapPrivateKey,
+         deriveEncryptionKey,
+         generateSalt,
+         toBase64 } from "../../lib/crypto";
+
+
 
 export default function Signup() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const {setToken} = useAuth();
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; displayName?: string; password?: string }>({});
   const [serverError, setServerError] = useState<string>("");
 
-  const signupMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post("/auth/register", {
-        email,
-        password,
-      });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setToken(data.token);
-      navigate("/setup");
-    },
-    onError: (error: any) => {
-    const message =
-    error?.response?.data?.message ||
-    error?.response?.data?.error ||
-    "Signup failed";
-
-    setServerError(message);
+  function generateUsername(email: string) {
+  return email
+    .split("@")[0]
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .toLowerCase();
 }
+
+  const signupMutation = useMutation({
+  mutationFn: async () => {
+    const keyPair = await generateRSAKeyPair();
+
+    const salt = generateSalt();
+
+    const derivedKey = await deriveEncryptionKey(password, salt);
+
+    const wrappedPrivateKey = await wrapPrivateKey(
+      keyPair.privateKey,
+      derivedKey
+    );
+
+    const publicKey = await exportPublicKey(keyPair.publicKey);
+    const username = generateUsername(email);
+
+    console.log({
+  publicKey,
+  wrappedPrivateKey,
+  salt: toBase64(salt),
+});
+
+    const res = await api.post("/auth/register", {
+      username,
+      display_name: displayName.trim() || email.split("@")[0],
+      password,
+      public_key: publicKey,
+      wrapped_private_key: wrappedPrivateKey,
+      pbkdf2_salt: toBase64(salt),
+    });
+
+    return res.data;
+  },
+
+  onSuccess: (data) => {
+    setToken(data.access_token);
+
+    navigate("/setup");
+  },
+
+  onError: (error: any) => {
+
+    console.log("ERROR OBJECT:", error);
+    console.log("RESPONSE:", error?.response);
+    console.log("DATA:", error?.response?.data);
+
+    const message =
+      error?.response?.data?.message ||
+      formatServerError(error?.response?.data?.detail) ||
+      error?.response?.data?.error ||
+      "Signup failed";
+
+    setServerError(
+    typeof message === "string"
+      ? message
+      : JSON.stringify(message)
+  );
+  },
   });
 
   const validate = () => {
@@ -41,6 +95,10 @@ export default function Signup() {
     newErrors.email = "Email is required";
   } else if (!/\S+@\S+\.\S+/.test(email)) {
     newErrors.email = "Invalid email format";
+  }
+
+  if (!displayName.trim()) {
+    newErrors.displayName = "Display name is required";
   }
 
   if (!password) {
@@ -70,6 +128,7 @@ export default function Signup() {
         </p>
 
         <form className="mt-6 space-y-4 text-left" onSubmit={(e) => {e.preventDefault();
+                                                                     setServerError("");
                                                                      if (!validate()) return;
                                                                      signupMutation.mutate();}}
         >
@@ -86,6 +145,21 @@ export default function Signup() {
             />
             {errors.email && (
               <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="displayName" className="text-sm text-gray-600">Display Name</label>
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              id="displayName"
+              type="text"
+              placeholder="Your name"
+              className="w-full mt-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.displayName && (
+              <p className="text-red-500 text-xs mt-1">{errors.displayName}</p>
             )}
           </div>
 
@@ -133,4 +207,27 @@ export default function Signup() {
       </div>
     </div>
   );
+}
+
+function formatServerError(detail: unknown) {
+  if (!detail) return "";
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String(item.msg);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return "";
 }
