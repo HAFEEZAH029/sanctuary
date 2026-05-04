@@ -3,37 +3,81 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
+import { unwrapPrivateKey,
+         deriveEncryptionKey,
+         fromBase64 } from "../../lib/crypto";
 
 export default function Login() {
 
   const navigate = useNavigate();
-  const { setToken } = useAuth();
+  const { setToken, setPrivateKey } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [serverError, setServerError] = useState<string>(" ");
 
+   function generateUsername(email: string) {
+    return email
+    .split("@")[0]
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .toLowerCase();
+   }
+
   const loginMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post("/auth/login", {
-        email,
-        password,
-      });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setToken(data.token);
+  mutationFn: async () => {
+
+   const username = generateUsername(email);
+
+    const res = await api.post("/auth/login", {
+      username,
+      password,
+    });
+
+    return res.data;
+  },
+
+  onSuccess: async (data) => {
+    try {
+      // ✅ Save token
+      setToken(data.access_token);
+
+      // 🔓 Extract values
+      const wrappedKey = data.user.wrapped_private_key;
+      const saltBase64 = data.user.pbkdf2_salt;
+
+      // 🔄 Convert salt
+      const salt = fromBase64(saltBase64);
+
+      // 🔑 Derive key again
+      const derivedKey = await deriveEncryptionKey(password, salt);
+
+      // 🔓 Unwrap private key
+      const privateKey = await unwrapPrivateKey(
+        wrappedKey,
+        derivedKey
+      );
+
+      // 💾 Store in memory
+      setPrivateKey(privateKey);
+
+      // 🚀 Go to dashboard
       navigate("/dashboard");
-    },
-    onError: (error: any) => {
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to restore secure session");
+    }
+  },
+
+  onError: (error: any) => {
     const message =
-    error?.response?.data?.message ||
-    error?.response?.data?.error ||
-    "Invalid credentials";
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      "Login failed";
 
     setServerError(message);
-}
-  });
+  },
+});
 
   const validate = () => {
   const newErrors: typeof errors = {};
@@ -68,6 +112,7 @@ export default function Login() {
         </p>
 
         <form className="mt-6 space-y-4" onSubmit={(e) => {e.preventDefault();
+                                                          setServerError("");
                                                           if (!validate()) return;
                                                           loginMutation.mutate();}}
         >

@@ -1,43 +1,31 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateKeyPair, exportPublicKey } from "../../lib/crypto";
-import { savePrivateKey } from "../../lib/storage";
-import { api } from "../../lib/api";
 
 export default function SetupKeys() {
   const navigate = useNavigate();
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState<number>();
 
   useEffect(() => {
-  const setup = async () => {
-    try {
-      const keyPair = await generateKeyPair();
+  let value = 0;
 
-      await savePrivateKey(keyPair.privateKey);
+  const interval = setInterval(() => {
+    value += 10;
+    setProgress(value);
 
-      const publicKey = await exportPublicKey(keyPair.publicKey);
-
-      await api.post("/keys", {
-        publicKey,
-      });
-
-      setProgress(100);
+    if (value >= 100) {
+      clearInterval(interval);
 
       setTimeout(() => {
         navigate("/dashboard");
       }, 500);
-
-    } catch (err) {
-      console.error(err);
-      alert("Key setup failed");
     }
-  };
+  }, 150);
 
-  setup();
+  return () => clearInterval(interval);
 }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4">
 
       <h1 className="text-xl font-semibold mb-6 flex items-center gap-2">
         🔐 Sanctuary

@@ -4,12 +4,15 @@ type AuthContextType = {
   token: string | null;
   setToken: (token: string | null) => void;
   isAuthenticated: boolean;
+  privateKey: CryptoKey | null;
+  setPrivateKey: (key: CryptoKey | null) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
+  const [privateKey, setPrivateKey] = useState<CryptoKey | null>(null);
 
   useEffect(() => {
     const savedToken = localStorage.getItem("token");
@@ -27,6 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(token);
     },
     isAuthenticated: !!token,
+    privateKey,
+    setPrivateKey,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
