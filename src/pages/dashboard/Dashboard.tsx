@@ -25,7 +25,7 @@ export default function Dashboard() {
         chats={conversationsFromServer}
         activeUser={activeUser}
        />
-      <ChatArea activeUser={activeUser} />
+      <ChatArea activeUser={activeUser} onBack={() => setActiveUser(null)} />
     </div>
   );
 }

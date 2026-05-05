@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api, saveAuthTokens } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { unwrapPrivateKey,
          deriveEncryptionKey,
@@ -39,6 +39,7 @@ export default function Login() {
   onSuccess: async (data) => {
     try {
       // ✅ Save token
+      saveAuthTokens(data.access_token, data.refresh_token);
       setToken(data.access_token);
       setCurrentUser(data.user);
 

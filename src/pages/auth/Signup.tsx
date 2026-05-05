@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api, saveAuthTokens } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { generateRSAKeyPair,
          exportPublicKey,
@@ -57,6 +57,7 @@ export default function Signup() {
   },
 
   onSuccess: (data) => {
+    saveAuthTokens(data.access_token, data.refresh_token);
     setToken(data.access_token);
     if (data.user) setCurrentUser(data.user);
     navigate("/setup");

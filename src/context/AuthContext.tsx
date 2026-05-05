@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { clearAuthTokens } from "../lib/api";
 
 type AuthUser = {
   id: string;
+  user_id?: string;
   username?: string;
   display_name?: string;
 };
@@ -43,8 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         localStorage.setItem("token", token);
       } else {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        clearAuthTokens();
         setCurrentUserState(null);
       }
       setToken(token);
