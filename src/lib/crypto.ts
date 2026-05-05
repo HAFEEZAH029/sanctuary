@@ -12,6 +12,55 @@ export async function generateRSAKeyPair() {
   );
 }
 
+export async function generateAESKey() {
+  return crypto.subtle.generateKey(
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
+
+export async function encryptAESKey(
+  aesKey: CryptoKey,
+  publicKey: CryptoKey
+) {
+  const rawKey = await crypto.subtle.exportKey("raw", aesKey);
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    publicKey,
+    rawKey
+  );
+
+  return btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+}
+
+export async function decryptAESKey(
+  encryptedKeyBase64: string,
+  privateKey: CryptoKey
+) {
+  const binary = Uint8Array.from(atob(encryptedKeyBase64), c =>
+    c.charCodeAt(0)
+  );
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "RSA-OAEP" },
+    privateKey,
+    binary
+  );
+
+  return crypto.subtle.importKey(
+    "raw",
+    decrypted,
+    { name: "AES-GCM" },
+    true,
+    ["decrypt"]
+  );
+}
+
 export function generateSalt() {
   return crypto.getRandomValues(new Uint8Array(16));
 }
@@ -184,6 +233,21 @@ export function fromBase64(base64: string) {
   return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 }
 
+export async function importPublicKey(base64: string) {
+  const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+  return crypto.subtle.importKey(
+    "spki",
+    binary,
+    {
+      name: "RSA-OAEP",
+      hash: "SHA-256",
+    },
+    true,
+    ["encrypt"]
+  );
+}
+
 export async function exportPublicKey(publicKey: CryptoKey) {
   const spki = await crypto.subtle.exportKey("spki", publicKey);
   return btoa(String.fromCharCode(...new Uint8Array(spki)));
@@ -193,10 +257,43 @@ export function toBase64(buffer: Uint8Array) {
   return btoa(String.fromCharCode(...buffer));
 }
 
-export async function encryptMessage() {
-  // coming soon
+export async function encryptMessage(text: string, aesKey: CryptoKey) {
+  const enc = new TextEncoder();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    enc.encode(text)
+  );
+
+  return {
+    ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
+    iv: btoa(String.fromCharCode(...iv)),
+  };
 }
 
-export async function decryptMessage() {
-  // coming soon
+export async function decryptMessage(
+  ciphertextBase64: string,
+  ivBase64: string,
+  aesKey: CryptoKey
+) {
+  const ciphertext = Uint8Array.from(atob(ciphertextBase64), c =>
+    c.charCodeAt(0)
+  );
+
+  const iv = Uint8Array.from(atob(ivBase64), c =>
+    c.charCodeAt(0)
+  );
+
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    aesKey,
+    ciphertext
+  );
+
+  return new TextDecoder().decode(decrypted);
 }

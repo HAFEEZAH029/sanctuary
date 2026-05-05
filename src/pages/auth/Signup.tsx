@@ -17,7 +17,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const {setToken} = useAuth();
+  const { setToken, setCurrentUser } = useAuth();
   const [errors, setErrors] = useState<{ email?: string; displayName?: string; password?: string }>({});
   const [serverError, setServerError] = useState<string>("");
 
@@ -44,12 +44,6 @@ export default function Signup() {
     const publicKey = await exportPublicKey(keyPair.publicKey);
     const username = generateUsername(email);
 
-    console.log({
-  publicKey,
-  wrappedPrivateKey,
-  salt: toBase64(salt),
-});
-
     const res = await api.post("/auth/register", {
       username,
       display_name: displayName.trim() || email.split("@")[0],
@@ -64,16 +58,11 @@ export default function Signup() {
 
   onSuccess: (data) => {
     setToken(data.access_token);
-
+    if (data.user) setCurrentUser(data.user);
     navigate("/setup");
   },
 
   onError: (error: any) => {
-
-    console.log("ERROR OBJECT:", error);
-    console.log("RESPONSE:", error?.response);
-    console.log("DATA:", error?.response?.data);
-
     const message =
       error?.response?.data?.message ||
       formatServerError(error?.response?.data?.detail) ||

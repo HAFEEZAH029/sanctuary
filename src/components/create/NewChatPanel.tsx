@@ -1,14 +1,19 @@
 import { useState } from "react";
 import { useSearchUsers } from "../../hooks/useSearchUsers";
 
-export default function NewChatPanel() {
+
+type Props = {
+  onSelectUser: (user: any) => void;
+};
+
+export default function NewChatPanel({ onSelectUser }: Props) {
   const [query, setQuery] = useState("");
 
   const { data: users, isLoading } = useSearchUsers(query);
 
   return (
-    <div className="p-4 mt-[50%]">
-
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b border-gray-200">
       <h2 className="text-lg font-semibold mb-2">
         New Conversation
       </h2>
@@ -23,8 +28,9 @@ export default function NewChatPanel() {
         onChange={(e) => setQuery(e.target.value)}
         className="w-full p-2 border rounded-lg mb-4"
       />
+     </div>
 
-      <div className="space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {isLoading && <p>Searching...</p>}
 
         {users?.map((user: any) => (
@@ -39,7 +45,7 @@ export default function NewChatPanel() {
               </p>
             </div>
 
-            <button className="bg-blue-50 text-blue-600 font-medium p-3 rounded-2xl">
+            <button onClick={() => onSelectUser(user)} className="bg-blue-50 text-blue-600 font-medium p-3 rounded-2xl cursor-pointer">
               Start
             </button>
           </div>
