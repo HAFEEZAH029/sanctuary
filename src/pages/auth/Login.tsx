@@ -10,7 +10,7 @@ import { unwrapPrivateKey,
 export default function Login() {
 
   const navigate = useNavigate();
-  const { setToken, setPrivateKey } = useAuth();
+  const { setToken, setPrivateKey, setCurrentUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -40,6 +40,7 @@ export default function Login() {
     try {
       // ✅ Save token
       setToken(data.access_token);
+      setCurrentUser(data.user);
 
       // 🔓 Extract values
       const wrappedKey = data.user.wrapped_private_key;
