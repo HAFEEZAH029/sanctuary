@@ -11,10 +11,22 @@ type Props = {
   refetchChats: () => void;
 };
 
+function getLatestMessagePreview(chat: any) {
+  const preview =
+    chat.lastMessage ||
+    chat.last_message ||
+    chat.latestMessage ||
+    chat.latest_message ||
+    chat.last_message_text ||
+    chat.message;
+
+  return preview || "No messages yet";
+}
+
 export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeUser, chats }: Props) {
 
   return (
-    <div className="w-80 border-r border-gray-200 bg-white flex flex-col">
+    <div className="w-80 border-r border-gray-200 bg-white flex flex-col min-h-0">
 
       {viewMode === "conversations" ? (
         chats.length === 0 ? (
@@ -33,37 +45,39 @@ export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeU
               </div>
             </div>
 
-            {chats.map((chat) => {
-              const chatId = chat.id ?? chat.user_id;
+            <div className="flex-1 overflow-y-auto">
+              {chats.map((chat) => {
+                const chatId = chat.id ?? chat.user_id;
 
-              return (
-                <button
-                  type="button"
-                  key={chatId}
-                  onClick={() => onSelectUser({ ...chat, id: chatId })}
-                  className={`w-full flex items-center gap-3 p-4 cursor-pointer transition text-left ${
-                    (activeUser?.id ?? activeUser?.user_id) === chatId ? "bg-blue-50" : ""
-                  }`}
-                >
-                  {/* Avatar */}
-                  <div className="w-10 h-10 rounded-full bg-slate-400 flex items-center justify-center">
-                    <span className="text-white text-sm">
-                      {chat.display_name?.charAt(0)}
-                    </span>
-                  </div>
+                return (
+                  <button
+                    type="button"
+                    key={chatId}
+                    onClick={() => onSelectUser({ ...chat, id: chatId })}
+                    className={`w-full flex items-center gap-3 p-4 cursor-pointer transition text-left ${
+                      (activeUser?.id ?? activeUser?.user_id) === chatId ? "bg-blue-50" : ""
+                    }`}
+                  >
+                    {/* Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-slate-400 flex items-center justify-center">
+                      <span className="text-white text-sm">
+                        {chat.display_name?.charAt(0)}
+                      </span>
+                    </div>
 
-                  {/* Name + last message */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-black truncate">
-                      {chat.display_name}
-                    </p>
-                    <p className="text-sm text-gray-500 truncate">
-                      {chat.lastMessage}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
+                    {/* Name + last message */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-black truncate">
+                        {chat.display_name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {getLatestMessagePreview(chat)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </>
         )
       ) : (

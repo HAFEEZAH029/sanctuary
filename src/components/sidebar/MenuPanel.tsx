@@ -1,25 +1,44 @@
 
 
+import { useAuth } from "../../context/AuthContext";
+
 type Props = {
   onNewChat: () => void;
   onViewChat: () => void;
 };
 
 export default function MenuPanel({ onNewChat, onViewChat }: Props) {
+  const { currentUser } = useAuth();
+  const displayName = currentUser?.display_name || currentUser?.username || "Signed in";
+  const username = currentUser?.username ? `@${currentUser.username}` : "";
+
   return (
     <div className="w-64 bg-gray-50 flex flex-col justify-between p-4 border-r border-gray-200">
       <div>
         {/* Header */}
-        <div className="mb-8 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
-            <div className="w-6 h-6 bg-slate-500 rounded-full"></div>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+              <div className="w-6 h-6 bg-slate-500 rounded-full"></div>
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-blue-600 font-semibold text-base truncate">Sanctuary</h1>
+              <p className="text-green-600 text-[10px] font-medium flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-green-600 rounded-full shrink-0"></span>
+                E2E Secured
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-blue-600 font-semibold text-base">Sanctuary</h1>
-            <p className="text-green-600 text-[10px] font-medium flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-green-600 rounded-full"></span>
-              E2EE Secured
+
+          <div className="min-w-0 max-w-24 pt-0.5 text-right">
+            <p className="text-gray-700 text-sm font-medium truncate">
+              {displayName}
             </p>
+            {username && (
+              <p className="text-gray-400 text-xs truncate">
+                {username}
+              </p>
+            )}
           </div>
         </div>
 

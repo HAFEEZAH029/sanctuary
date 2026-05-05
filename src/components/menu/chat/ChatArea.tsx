@@ -1,6 +1,6 @@
 import ChatAreaEmpty from "./ChatAreaEmpty";
 import { useMessages } from "../../../hooks/useMessages";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../../../lib/api";
 import { getOwnPublicKey, getUserPublicKey } from "../../../lib/keys";
 import {encryptAESKey,
@@ -16,17 +16,45 @@ import { useAuth } from "../../../context/AuthContext";
 
 type Props = {
   activeUser: any;
+  onBack: () => void;
 };
 
 const EMPTY_MESSAGES: any[] = [];
 
-export default function ChatArea({ activeUser }: Props) {
+function getMessageTime(message: any) {
+  const time = new Date(message.created_at ?? 0).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function getInitial(user: any) {
+  return (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
+}
+
+function getSendErrorMessage(error: any) {
+  const detail =
+    error?.response?.data?.message ||
+    error?.response?.data?.detail ||
+    error?.response?.data?.error ||
+    error?.message;
+
+  if (!detail) return "Message failed to send. Please try again.";
+
+  return typeof detail === "string"
+    ? detail
+    : JSON.stringify(detail);
+}
+
+export default function ChatArea({ activeUser, onBack }: Props) {
 
   const [text, setText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const activeUserId = activeUser?.id ?? activeUser?.user_id ?? null;
   const { data: messages = EMPTY_MESSAGES, isLoading, refetch } = useMessages(activeUserId);
   const { currentUser, privateKey } = useAuth();
+  const currentUserId = currentUser?.id ?? currentUser?.user_id ?? null;
   const [decryptedMessages, setDecryptedMessages] = useState<any[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
 useEffect(() => {
   if (!activeUser || !privateKey) {
@@ -40,7 +68,7 @@ useEffect(() => {
         try {
           // 1. decrypt AES key
           const encryptedKeyForThisUser =
-            msg.from_user_id === currentUser?.id
+            msg.from_user_id === currentUserId
               ? msg.payload.encryptedKeyForSelf
               : msg.payload.encryptedKey;
 
@@ -56,57 +84,91 @@ useEffect(() => {
           return {
             id: msg.id,
             text,
-            isOwn: true,
+            isOwn: msg.from_user_id === currentUserId,
             created_at: msg.created_at,
           };
         } catch {
           return {
             id: msg.id,
             text: "[Unable to decrypt]",
-            isOwn: false,
+            isOwn: msg.from_user_id === currentUserId,
           };
         }
       })
     );
 
-    setDecryptedMessages(result);
+    setDecryptedMessages(
+      result.sort((first, second) => getMessageTime(first) - getMessageTime(second))
+    );
   };
 
   processMessages();
-}, [activeUserId, currentUser?.id, messages, privateKey]);
+}, [activeUserId, currentUserId, messages, privateKey]);
+
+useEffect(() => {
+  messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+}, [decryptedMessages.length]);
 
 
   const handleSend = async () => {
-    if (!text.trim()) return;
-    if (!currentUser?.id) return;
+    const messageText = text.trim();
+
+    if (!messageText || isSending) return;
+    if (!currentUserId) return;
 
     if (!activeUserId) return;
 
-    const recipientPublicKeyBase64 = await getUserPublicKey(activeUserId);
-    const ownPublicKeyBase64 = await getOwnPublicKey(currentUser.id);
+    setIsSending(true);
+    setSendError("");
 
-    const recipientPublicKey = await importPublicKey(recipientPublicKeyBase64);
-    const ownPublicKey = await importPublicKey(ownPublicKeyBase64);
+    try {
+      const recipientPublicKeyBase64 = await getUserPublicKey(activeUserId);
+      const ownPublicKeyBase64 = await getOwnPublicKey(currentUserId);
 
-    const aesKey = await generateAESKey();
+      const recipientPublicKey = await importPublicKey(recipientPublicKeyBase64);
+      const ownPublicKey = await importPublicKey(ownPublicKeyBase64);
 
-    const { ciphertext, iv } = await encryptMessage(text, aesKey);
+      const aesKey = await generateAESKey();
 
-    const encryptedKey = await encryptAESKey(aesKey, recipientPublicKey);
+      const { ciphertext, iv } = await encryptMessage(messageText, aesKey);
 
-    const encryptedKeyForSelf = await encryptAESKey(aesKey, ownPublicKey);
+      const encryptedKey = await encryptAESKey(aesKey, recipientPublicKey);
 
-    await api.post("/messages", {
-    to: activeUserId,
-    payload: {
-      ciphertext,
-      iv,
-      encryptedKey,
-      encryptedKeyForSelf,
-    },
-    });
-    await refetch();
+      const encryptedKeyForSelf = await encryptAESKey(aesKey, ownPublicKey);
+
+      await api.post("/messages", {
+      to: activeUserId,
+      payload: {
+        ciphertext,
+        iv,
+        encryptedKey,
+        encryptedKeyForSelf,
+      },
+      });
+    } catch (error) {
+      console.error("Failed to send message", error);
+      setSendError(getSendErrorMessage(error));
+      setIsSending(false);
+      return;
+    }
+
+    setDecryptedMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: `pending-${Date.now()}`,
+        text: messageText,
+        isOwn: true,
+        created_at: new Date().toISOString(),
+      },
+    ]);
     setText("");
+    setIsSending(false);
+
+    try {
+      await refetch();
+    } catch (error) {
+      console.error("Message sent, but failed to refresh messages", error);
+    }
   };
 
 
@@ -120,7 +182,12 @@ useEffect(() => {
 
       <div className="px-6 py-4 border-b bg-white flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
-          <button className="text-gray-600 hover:text-gray-900">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back to empty chat"
+            className="text-gray-600 hover:text-gray-900 cursor-pointer"
+          >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -178,13 +245,41 @@ useEffect(() => {
           <p className="text-center text-gray-400">Loading messages...</p>
         ) : (
           decryptedMessages.map((message: any) => (
-            <div key={message.id} className="w-fit bg-blue-50 mb-s p-2 rounded">
-              <p className="text-xs text-gray-400">
-                {message.text}
-              </p>
+            <div
+              key={message.id}
+              className={`flex items-end gap-2 ${
+                message.isOwn ? "justify-end" : "justify-start"
+              }`}
+            >
+              {!message.isOwn && (
+                <div className="w-8 h-8 rounded-full bg-slate-400 flex items-center justify-center overflow-hidden shrink-0">
+                  <span className="text-white text-xs font-medium">
+                    {getInitial(activeUser)}
+                  </span>
+                </div>
+              )}
+
+              <div
+                className={`max-w-[70%] px-3 py-2 rounded-lg ${
+                  message.isOwn
+                    ? "bg-blue-600 text-white rounded-br-sm"
+                    : "bg-blue-50 text-black rounded-bl-sm"
+                }`}
+              >
+                <p className="text-[0.9rem] leading-relaxed break-words">
+                  {message.text}
+                </p>
+              </div>
+
+              {message.isOwn && (
+                <div className="w-8 h-8 rounded-full bg-slate-400 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className="w-5 h-5 bg-slate-300 rounded-full"></div>
+                </div>
+              )}
             </div>
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="border-t bg-white shrink-0">
@@ -216,12 +311,28 @@ useEffect(() => {
               </svg>
             </button>
 
-            <button onClick={handleSend} className="p-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-full cursor-pointer transition">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-              </svg>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={isSending || !text.trim()}
+              aria-label={isSending ? "Sending message" : "Send message"}
+              className="p-2.5 text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed rounded-full cursor-pointer transition"
+            >
+              {isSending ? (
+                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+              )}
             </button>
           </div>
+          {sendError && (
+            <p className="mt-2 text-xs text-red-500">{sendError}</p>
+          )}
         </div>
 
         <div className="px-6 pb-3 flex items-center justify-center gap-1.5 text-xs text-gray-500">
