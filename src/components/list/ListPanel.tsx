@@ -20,7 +20,7 @@ function getLatestMessagePreview(chat: any) {
     chat.last_message_text ||
     chat.message;
 
-  return preview || "No messages yet";
+  return preview || "Tap to view";
 }
 
 export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeUser, chats }: Props) {
@@ -70,7 +70,7 @@ export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeU
                       <p className="font-medium text-sm text-black truncate">
                         {chat.display_name}
                       </p>
-                      <p className="text-xs text-gray-500 truncate">
+                      <p className="text-xs text-gray-500 italic truncate">
                         {getLatestMessagePreview(chat)}
                       </p>
                     </div>

@@ -27,6 +27,18 @@ function getMessageTime(message: any) {
   return Number.isNaN(time) ? 0 : time;
 }
 
+function formatMessageTime(createdAt: string) {
+  const time = new Date(createdAt);
+
+  if (Number.isNaN(time.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(time);
+}
+
 function getInitial(user: any) {
   return (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
 }
@@ -53,6 +65,22 @@ function appendUniqueMessage(messages: any[], message: any) {
   return [...messages, message].sort(
     (first, second) => getMessageTime(first) - getMessageTime(second)
   );
+}
+
+function isPendingMessage(message: any) {
+  return Boolean(message.pending) || String(message.id).startsWith("pending-");
+}
+
+function hasMatchingServerMessage(messages: any[], pendingMessage: any) {
+  const pendingTime = getMessageTime(pendingMessage);
+
+  return messages.some((message) => {
+    const timeDifference = Math.abs(getMessageTime(message) - pendingTime);
+
+    return message.isOwn === pendingMessage.isOwn &&
+      message.text === pendingMessage.text &&
+      timeDifference < 30000;
+  });
 }
 
 export default function ChatArea({ activeUser, onBack }: Props) {
@@ -134,11 +162,21 @@ useEffect(() => {
       })
     );
 
-    setDecryptedMessages(
-      result
-        .filter(Boolean)
-        .sort((first, second) => getMessageTime(first) - getMessageTime(second))
-    );
+    const sortedMessages = result
+      .filter(Boolean)
+      .sort((first, second) => getMessageTime(first) - getMessageTime(second));
+
+    setDecryptedMessages((currentMessages) => {
+      const pendingMessages = currentMessages.filter(
+        (message) =>
+          isPendingMessage(message) &&
+          !hasMatchingServerMessage(sortedMessages, message)
+      );
+
+      return [...sortedMessages, ...pendingMessages].sort(
+        (first, second) => getMessageTime(first) - getMessageTime(second)
+      );
+    });
   };
 
   processMessages();
@@ -159,6 +197,7 @@ useEffect(() => {
 
     setIsSending(true);
     setSendError("");
+    let storedMessage = null;
 
     try {
       const recipientPublicKeyBase64 = await getUserPublicKey(activeUserId);
@@ -185,10 +224,11 @@ useEffect(() => {
       const sentOverSocket = sendRealtimeMessage(activeUserId, payload);
 
       if (!sentOverSocket) {
-        await api.post("/messages", {
+        const res = await api.post("/messages", {
           to: activeUserId,
           payload,
         });
+        storedMessage = res.data;
       }
     } catch (error) {
       console.error("Failed to send message", error);
@@ -200,19 +240,22 @@ useEffect(() => {
     setDecryptedMessages((currentMessages) => [
       ...currentMessages,
       {
-        id: `pending-${Date.now()}`,
+        id: storedMessage?.id || `pending-${Date.now()}`,
         text: messageText,
         isOwn: true,
-        created_at: new Date().toISOString(),
+        created_at: storedMessage?.created_at || new Date().toISOString(),
+        pending: !storedMessage,
       },
     ]);
     setText("");
     setIsSending(false);
 
-    try {
-      await refetch();
-    } catch (error) {
-      console.error("Message sent, but failed to refresh messages", error);
+    if (!isConnected) {
+      try {
+        await refetch();
+      } catch (error) {
+        console.error("Message sent, but failed to refresh messages", error);
+      }
     }
   };
 
@@ -307,16 +350,28 @@ useEffect(() => {
                 </div>
               )}
 
-              <div
-                className={`max-w-[70%] px-3 py-2 rounded-lg ${
-                  message.isOwn
-                    ? "bg-blue-600 text-white rounded-br-sm"
-                    : "bg-blue-50 text-black rounded-bl-sm"
-                }`}
-              >
-                <p className="text-[0.9rem] leading-relaxed wrap-break-words">
-                  {message.text}
-                </p>
+              <div className={`max-w-[70%] ${message.isOwn ? "items-end" : "items-start"} flex flex-col`}>
+                <div
+                  className={`w-fit max-w-full px-3 py-2 rounded-lg ${
+                    message.isOwn
+                      ? "bg-blue-600 text-white rounded-br-sm"
+                      : "bg-blue-50 text-black rounded-bl-sm"
+                  }`}
+                >
+                  <p className="text-[0.9rem] leading-relaxed wrap-break-words">
+                    {message.text}
+                  </p>
+                </div>
+
+                {message.created_at && (
+                  <p
+                    className={`mt-1 px-1 text-[10px] ${
+                      message.isOwn ? "text-gray-400 text-right" : "text-gray-400 text-left"
+                    }`}
+                  >
+                    {formatMessageTime(message.created_at)}
+                  </p>
+                )}
               </div>
 
               {message.isOwn && (

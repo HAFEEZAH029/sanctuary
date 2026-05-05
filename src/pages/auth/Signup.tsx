@@ -17,7 +17,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const { setToken, setCurrentUser } = useAuth();
+  const { setToken, setCurrentUser, setPrivateKey } = useAuth();
   const [errors, setErrors] = useState<{ email?: string; displayName?: string; password?: string }>({});
   const [serverError, setServerError] = useState<string>("");
 
@@ -53,12 +53,16 @@ export default function Signup() {
       pbkdf2_salt: toBase64(salt),
     });
 
-    return res.data;
+    return {
+      data: res.data,
+      privateKey: keyPair.privateKey,
+    };
   },
 
-  onSuccess: (data) => {
+  onSuccess: ({ data, privateKey }) => {
     saveAuthTokens(data.access_token, data.refresh_token);
     setToken(data.access_token);
+    setPrivateKey(privateKey);
     if (data.user) setCurrentUser(data.user);
     navigate("/setup");
   },
