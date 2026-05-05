@@ -24,7 +24,11 @@ export function clearAuthTokens() {
   localStorage.removeItem("user");
 }
 
-async function refreshAccessToken() {
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export async function refreshAccessToken() {
   const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
 
   if (!refreshToken) return null;
@@ -55,7 +59,8 @@ async function refreshAccessToken() {
 function isAuthRoute(url?: string) {
   return url?.includes("/auth/login") ||
     url?.includes("/auth/register") ||
-    url?.includes("/auth/refresh");
+    url?.includes("/auth/refresh") ||
+    url?.includes("/auth/logout");
 }
 
 api.interceptors.request.use((config) => {

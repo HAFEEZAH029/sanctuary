@@ -1,5 +1,6 @@
 import ChatAreaEmpty from "./ChatAreaEmpty";
 import { useMessages } from "../../../hooks/useMessages";
+import { useRealtimeMessages } from "../../../hooks/useRealtimeMessages";
 import { useState, useEffect, useRef } from "react";
 import { api } from "../../../lib/api";
 import { getOwnPublicKey, getUserPublicKey } from "../../../lib/keys";
@@ -44,6 +45,16 @@ function getSendErrorMessage(error: any) {
     : JSON.stringify(detail);
 }
 
+function appendUniqueMessage(messages: any[], message: any) {
+  if (messages.some((existingMessage) => existingMessage.id === message.id)) {
+    return messages;
+  }
+
+  return [...messages, message].sort(
+    (first, second) => getMessageTime(first) - getMessageTime(second)
+  );
+}
+
 export default function ChatArea({ activeUser, onBack }: Props) {
 
   const [text, setText] = useState("");
@@ -56,6 +67,60 @@ export default function ChatArea({ activeUser, onBack }: Props) {
   const [decryptedMessages, setDecryptedMessages] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const decryptChatMessage = async (msg: any) => {
+    if (!privateKey) return null;
+
+    try {
+      const encryptedKeyForThisUser =
+        msg.from_user_id === currentUserId
+          ? msg.payload.encryptedKeyForSelf
+          : msg.payload.encryptedKey;
+
+      const aesKey = await decryptAESKey(encryptedKeyForThisUser, privateKey);
+
+      const text = await decryptMessage(
+        msg.payload.ciphertext,
+        msg.payload.iv,
+        aesKey
+      );
+
+      return {
+        id: msg.id,
+        text,
+        isOwn: msg.from_user_id === currentUserId,
+        created_at: msg.created_at,
+      };
+    } catch {
+      return {
+        id: msg.id,
+        text: "[Unable to decrypt]",
+        isOwn: msg.from_user_id === currentUserId,
+        created_at: msg.created_at,
+      };
+    }
+  };
+
+  const { isConnected, sendRealtimeMessage } = useRealtimeMessages({
+    enabled: !!currentUserId,
+    onMessageReceived: async (message) => {
+      if (!activeUserId || !privateKey) return;
+
+      const belongsToActiveChat =
+        message.from_user_id === activeUserId ||
+        message.to_user_id === activeUserId;
+
+      if (!belongsToActiveChat) return;
+
+      const decryptedMessage = await decryptChatMessage(message);
+
+      if (!decryptedMessage) return;
+
+      setDecryptedMessages((currentMessages) =>
+        appendUniqueMessage(currentMessages, decryptedMessage)
+      );
+    },
+  });
+
 useEffect(() => {
   if (!activeUser || !privateKey) {
     setDecryptedMessages([]);
@@ -65,40 +130,14 @@ useEffect(() => {
   const processMessages = async () => {
     const result = await Promise.all(
       messages.map(async (msg: any) => {
-        try {
-          // 1. decrypt AES key
-          const encryptedKeyForThisUser =
-            msg.from_user_id === currentUserId
-              ? msg.payload.encryptedKeyForSelf
-              : msg.payload.encryptedKey;
-
-          const aesKey = await decryptAESKey(encryptedKeyForThisUser, privateKey);
-
-          // 2. decrypt message
-          const text = await decryptMessage(
-            msg.payload.ciphertext,
-            msg.payload.iv,
-            aesKey
-          );
-
-          return {
-            id: msg.id,
-            text,
-            isOwn: msg.from_user_id === currentUserId,
-            created_at: msg.created_at,
-          };
-        } catch {
-          return {
-            id: msg.id,
-            text: "[Unable to decrypt]",
-            isOwn: msg.from_user_id === currentUserId,
-          };
-        }
+        return decryptChatMessage(msg);
       })
     );
 
     setDecryptedMessages(
-      result.sort((first, second) => getMessageTime(first) - getMessageTime(second))
+      result
+        .filter(Boolean)
+        .sort((first, second) => getMessageTime(first) - getMessageTime(second))
     );
   };
 
@@ -136,15 +175,21 @@ useEffect(() => {
 
       const encryptedKeyForSelf = await encryptAESKey(aesKey, ownPublicKey);
 
-      await api.post("/messages", {
-      to: activeUserId,
-      payload: {
+      const payload = {
         ciphertext,
         iv,
         encryptedKey,
         encryptedKeyForSelf,
-      },
-      });
+      };
+
+      const sentOverSocket = sendRealtimeMessage(activeUserId, payload);
+
+      if (!sentOverSocket) {
+        await api.post("/messages", {
+          to: activeUserId,
+          payload,
+        });
+      }
     } catch (error) {
       console.error("Failed to send message", error);
       setSendError(getSendErrorMessage(error));
@@ -202,6 +247,9 @@ useEffect(() => {
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                 <span className="text-green-600 font-medium">SECURE LINK ACTIVE</span>
+                <span className="text-gray-400">
+                  {isConnected ? "REAL-TIME" : "OFFLINE FALLBACK"}
+                </span>
               </div>
             </div>
           </div>
@@ -266,7 +314,7 @@ useEffect(() => {
                     : "bg-blue-50 text-black rounded-bl-sm"
                 }`}
               >
-                <p className="text-[0.9rem] leading-relaxed break-words">
+                <p className="text-[0.9rem] leading-relaxed wrap-break-words">
                   {message.text}
                 </p>
               </div>
