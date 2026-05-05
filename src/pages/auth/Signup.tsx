@@ -183,7 +183,6 @@ export default function Signup() {
           </button>
         </form>
 
-        {/* Info Box */}
         <div className="bg-gray-100 rounded-lg p-3 mt-4 text-sm text-gray-600">
           🔐 Your encryption keys will be generated locally on this device.
         </div>

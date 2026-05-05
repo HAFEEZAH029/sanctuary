@@ -38,31 +38,24 @@ export default function Login() {
 
   onSuccess: async (data) => {
     try {
-      // ✅ Save token
       saveAuthTokens(data.access_token, data.refresh_token);
       setToken(data.access_token);
       setCurrentUser(data.user);
 
-      // 🔓 Extract values
       const wrappedKey = data.user.wrapped_private_key;
       const saltBase64 = data.user.pbkdf2_salt;
 
-      // 🔄 Convert salt
       const salt = fromBase64(saltBase64);
 
-      // 🔑 Derive key again
       const derivedKey = await deriveEncryptionKey(password, salt);
 
-      // 🔓 Unwrap private key
       const privateKey = await unwrapPrivateKey(
         wrappedKey,
         derivedKey
       );
 
-      // 💾 Store in memory
       setPrivateKey(privateKey);
 
-      // 🚀 Go to dashboard
       navigate("/dashboard");
 
     } catch (err) {

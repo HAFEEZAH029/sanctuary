@@ -1,6 +1,7 @@
-
-
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { api, getRefreshToken } from "../../lib/api";
 
 type Props = {
   onNewChat: () => void;
@@ -8,9 +9,34 @@ type Props = {
 };
 
 export default function MenuPanel({ onNewChat, onViewChat }: Props) {
-  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const { currentUser, setCurrentUser, setPrivateKey, setToken } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const displayName = currentUser?.display_name || currentUser?.username || "Signed in";
   const username = currentUser?.username ? `@${currentUser.username}` : "";
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+
+    try {
+      const refreshToken = getRefreshToken();
+
+      if (refreshToken) {
+        await api.post("/auth/logout", {
+          refresh_token: refreshToken,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to revoke refresh token during logout", error);
+    } finally {
+      setPrivateKey(null);
+      setCurrentUser(null);
+      setToken(null);
+      navigate("/login", { replace: true });
+    }
+  };
 
   return (
     <div className="w-64 bg-gray-50 flex flex-col justify-between p-4 border-r border-gray-200">
@@ -42,7 +68,6 @@ export default function MenuPanel({ onNewChat, onViewChat }: Props) {
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="space-y-1">
           <button
             type="button"
@@ -79,7 +104,6 @@ export default function MenuPanel({ onNewChat, onViewChat }: Props) {
         </nav>
       </div>
 
-      {/* Bottom */}
       <div>
         <button
           type="button"
@@ -91,12 +115,17 @@ export default function MenuPanel({ onNewChat, onViewChat }: Props) {
         </button>
 
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-gray-600 text-sm p-2 rounded-lg cursor-pointer hover:bg-gray-100 transition">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-full flex items-center gap-2 text-gray-600 text-sm p-2 rounded-lg cursor-pointer hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 transition"
+          >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            <span>Logout</span>
-          </div>
+            <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+          </button>
           
           <div className="flex items-center gap-2 text-gray-600 text-sm p-2 rounded-lg cursor-pointer hover:bg-gray-100 transition">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
