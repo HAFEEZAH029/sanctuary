@@ -1,6 +1,7 @@
 import ChatAreaEmpty from "./ChatAreaEmpty";
 import { useMessages } from "../../../hooks/useMessages";
 import { useRealtimeMessages } from "../../../hooks/useRealtimeMessages";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import { api } from "../../../lib/api";
 import { getOwnPublicKey, getUserPublicKey } from "../../../lib/keys";
@@ -89,6 +90,7 @@ export default function ChatArea({ activeUser, onBack }: Props) {
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const activeUserId = activeUser?.id ?? activeUser?.user_id ?? null;
+  const queryClient = useQueryClient();
   const { data: messages = EMPTY_MESSAGES, isLoading, refetch } = useMessages(activeUserId);
   const { currentUser, privateKey } = useAuth();
   const currentUserId = currentUser?.id ?? currentUser?.user_id ?? null;
@@ -250,12 +252,15 @@ useEffect(() => {
     setText("");
     setIsSending(false);
 
-    if (!isConnected) {
-      try {
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      await queryClient.invalidateQueries({ queryKey: ["messages", currentUserId, activeUserId] });
+
+      if (!isConnected) {
         await refetch();
-      } catch (error) {
-        console.error("Message sent, but failed to refresh messages", error);
       }
+    } catch (error) {
+      console.error("Message sent, but failed to refresh chats", error);
     }
   };
 
