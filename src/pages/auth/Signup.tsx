@@ -10,6 +10,29 @@ import { generateRSAKeyPair,
          generateSalt,
          toBase64 } from "../../lib/crypto";
 
+type RegisteredUser = {
+  id: string;
+  user_id?: string;
+  username?: string;
+  display_name?: string;
+  public_key?: string;
+  wrapped_private_key?: string;
+  pbkdf2_salt?: string;
+};
+
+function getRegisteredUser(data: any): RegisteredUser | null {
+  const user = data.user ?? data;
+  const userId = user?.id ?? user?.user_id;
+
+  if (!userId) {
+    return null;
+  }
+
+  return {
+    ...user,
+    id: userId,
+  };
+}
 
 
 export default function Signup() {
@@ -60,10 +83,17 @@ export default function Signup() {
   },
 
   onSuccess: ({ data, privateKey }) => {
+    const user = getRegisteredUser(data);
+
+    if (!user) {
+      setServerError("Account created, but the session could not be restored. Please log in.");
+      return;
+    }
+
     saveAuthTokens(data.access_token, data.refresh_token);
     setToken(data.access_token);
     setPrivateKey(privateKey);
-    if (data.user) setCurrentUser(data.user);
+    setCurrentUser(user);
     navigate("/setup");
   },
 
