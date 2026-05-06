@@ -1,3 +1,4 @@
+import { FaLock } from "react-icons/fa";
 import NewChatPanel from "../create/NewChatPanel";
 import ListPanelEmpty from "./ListPanelEmpty";
 {/**import { api } from "../../lib/api"; **/}
@@ -20,7 +21,10 @@ function getLatestMessagePreview(chat: any) {
     chat.last_message_text ||
     chat.message;
 
-  return preview || "Tap to view";
+  return {
+    text: preview || "Encrypted message",
+    isEncryptedFallback: !preview,
+  };
 }
 
 export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeUser, chats }: Props) {
@@ -48,6 +52,7 @@ export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeU
             <div className="flex-1 overflow-y-auto">
               {chats.map((chat) => {
                 const chatId = chat.id ?? chat.user_id;
+                const latestMessagePreview = getLatestMessagePreview(chat);
 
                 return (
                   <button
@@ -70,8 +75,11 @@ export default function ListPanel({ viewMode, setViewMode, onSelectUser, activeU
                       <p className="font-medium text-sm text-black truncate">
                         {chat.display_name}
                       </p>
-                      <p className="text-xs text-gray-500 italic truncate">
-                        {getLatestMessagePreview(chat)}
+                      <p className="flex min-w-0 items-center gap-1 text-xs text-gray-500 italic">
+                        {latestMessagePreview.isEncryptedFallback && (
+                          <FaLock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        )}
+                        <span className="truncate">{latestMessagePreview.text}</span>
                       </p>
                     </div>
                   </button>
