@@ -1,36 +1,97 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api, saveAuthTokens } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
+import { unwrapPrivateKey,
+         deriveEncryptionKey,
+         fromBase64 } from "../../lib/crypto";
 
 export default function Login() {
 
-
   const navigate = useNavigate();
-  const { setToken } = useAuth();
-
+  const { setToken, setPrivateKey, setCurrentUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [serverError, setServerError] = useState<string>(" ");
+
+   function generateUsername(email: string) {
+    return email
+    .split("@")[0]
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .toLowerCase();
+   }
 
   const loginMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post("/auth/login", {
-        email,
-        password,
-      });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setToken(data.token);
+  mutationFn: async () => {
 
-      // 🔥 Important decision point
+   const username = generateUsername(email);
+
+    const res = await api.post("/auth/login", {
+      username,
+      password,
+    });
+
+    return res.data;
+  },
+
+  onSuccess: async (data) => {
+    try {
+      saveAuthTokens(data.access_token, data.refresh_token);
+      setToken(data.access_token);
+      setCurrentUser(data.user);
+
+      const wrappedKey = data.user.wrapped_private_key;
+      const saltBase64 = data.user.pbkdf2_salt;
+
+      const salt = fromBase64(saltBase64);
+
+      const derivedKey = await deriveEncryptionKey(password, salt);
+
+      const privateKey = await unwrapPrivateKey(
+        wrappedKey,
+        derivedKey
+      );
+
+      setPrivateKey(privateKey);
+
       navigate("/dashboard");
-    },
-    onError: () => {
-      alert("Invalid credentials");
-    },
-  });
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to restore secure session");
+    }
+  },
+
+  onError: (error: any) => {
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      "Login failed";
+
+    setServerError(message);
+  },
+});
+
+  const validate = () => {
+  const newErrors: typeof errors = {};
+
+  if (!email) {
+    newErrors.email = "Email is required";
+  } else if (!/\S+@\S+\.\S+/.test(email)) {
+    newErrors.email = "Invalid email format";
+  }
+
+  if (!password) {
+    newErrors.password = "Password is required";
+  } else if (password.length < 8) {
+    newErrors.password = "Password must be at least 8 characters";
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
 
 
   return (
@@ -45,7 +106,11 @@ export default function Login() {
           🔒 E2E Secured
         </p>
 
-        <form className="mt-6 space-y-4" onSubmit={(e) => {e.preventDefault(); loginMutation.mutate();}}>
+        <form className="mt-6 space-y-4" onSubmit={(e) => {e.preventDefault();
+                                                          setServerError("");
+                                                          if (!validate()) return;
+                                                          loginMutation.mutate();}}
+        >
           <div className="text-left">
             <label htmlFor="email" className="text-sm text-gray-600 text-left">Email address</label>
             <input
@@ -56,6 +121,9 @@ export default function Login() {
               placeholder="name@company.com"
               className="w-full mt-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {errors.email && (
+              <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+            )}
           </div>
 
           <div className="text-left">
@@ -68,7 +136,16 @@ export default function Login() {
               placeholder="********"
               className="w-full mt-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {errors.password && (
+              <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+            )}
           </div>
+
+          {serverError && (
+          <p className="text-red-500 text-sm mb-2 text-left">
+                    {serverError}
+          </p>
+          )}
 
           <button
             role="button"
